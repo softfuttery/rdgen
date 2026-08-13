@@ -519,7 +519,7 @@ jobs:
             if [ "${{ env.appname }}" != "rustdesk" ]; then
                 # Change files names in the output .deb
                 sed -ie "s|\(cp .* \)tmpdeb/usr/share/rustdesk/files/systemd/|\1tmpdeb/usr/share/rustdesk/files/systemd/${{ env.appname }}.service|g" build.py
-                sed -ie "s|cp -r \(.\+\)\* \([^ ]\+\)/rustdesk|mv \1rustdesk \1${{ env.appname }}; cp -r \1\* \2/${{ env.appname }}|g" build.py
+                sed -ie "s|cp -r \(.\+\)\* \([^ ]\+\)/rustdesk|mkdir -p \2/${{ env.appname }}; mv \1rustdesk \1${{ env.appname }}; cp -r \1\* \2/${{ env.appname }}|g" build.py
                 sed -ie "s|\(tmpdeb/[^ ]*\)rustdesk|\1${{ env.appname }}|g" build.py
                 sed -ie "s|Package: rustdesk|Package: ${{ env.appname }}|g" build.py
                 sed -ie "s|RustDesk|${{ env.appname }}|g" res/rustdesk.desktop
