@@ -1,5 +1,5 @@
 name: Custom Android Client Generator
-run-name: Custom Android Client Generator
+run-name: Recover Android ARM64 APK
 on: 
   workflow_dispatch:
     inputs:
@@ -45,16 +45,54 @@ env:
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
   STATUS_URL: "${{ secrets.GENURL }}/updategh"
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   setup:
-    uses: ./.github/workflows/fetch-encrypted-secrets.yml
-    with:
-      zip_url_json: ${{ inputs.zip_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore original encrypted configuration
+        uses: actions/download-artifact@v8
+        with:
+          github-token: ${{ github.token }}
+          run-id: 44447883266
+          name: encrypted-secrets-zip
+
+      - name: Verify original configuration
+        shell: bash
+        run: |
+          echo 'b3d3cad4edfad69c978630d0fe2d9a1ca49fa3e57a4f2dc8a4de1547aeacbd78  secrets.zip' | sha256sum --check -
+
+      - name: Upload encrypted configuration
+        uses: actions/upload-artifact@v7
+        with:
+          name: encrypted-secrets-zip
+          path: secrets.zip
+          retention-days: 1
 
   generate-bridge-linux:
-    uses: ./.github/workflows/bridge.yml
-    with:
-      version: ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore matching RustDesk 1.5.3 bridge
+        uses: actions/download-artifact@v8
+        with:
+          github-token: ${{ github.token }}
+          run-id: 44447883266
+          name: bridge-artifact
+
+      - name: Upload matching bridge
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridge-artifact
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+            ./flutter/macos/Runner/bridge_generated.h
+            ./flutter/ios/Runner/bridge_generated.h
 
   build-rustdesk-android:
     needs: [generate-bridge-linux, setup]
@@ -67,20 +105,6 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-linux-android,
-              os: ubuntu-24.04,
-              reltype: release,
-              suffix: "",
-            }
-          - {
-              arch: armv7,
-              target: armv7-linux-androideabi,
-              os: ubuntu-24.04,
-              reltype: release,
-              suffix: "",
-            }
-          - {
-              arch: x86_64,
-              target: x86_64-linux-android,
               os: ubuntu-24.04,
               reltype: release,
               suffix: "",
@@ -138,8 +162,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          echo 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          RDGEN_APT_OPTIONS=(
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          sudo apt-get "${RDGEN_APT_OPTIONS[@]}" update
+          sudo apt-get "${RDGEN_APT_OPTIONS[@]}" install -y \
                clang \
                cmake \
                curl \
@@ -176,7 +206,7 @@ jobs:
       - name: Install dependencies
         continue-on-error: true
         run: |
-          sudo apt-get install -y potrace
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y potrace
 
       - name: Checkout source code
         if: ${{ env.VERSION != 'master' }}
